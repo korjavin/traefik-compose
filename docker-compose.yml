@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  traefik:
+    image: ${TRAEFIK_IMAGE:-traefik:v3.2}
+    container_name: ${CONTAINER_NAME:-traefik}
+    restart: unless-stopped
+    networks:
+      - proxy-network
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      # Podman socket (read-only) for container discovery
+      - /var/run/podman/podman.sock:/var/run/docker.sock:ro
+      # ACME certificate storage
+      - traefik-certs:/etc/traefik/acme
+    command:
+      # --- API & Dashboard ---
+      - "--api.dashboard=${TRAEFIK_DASHBOARD:-true}"
+
+      # --- Docker Provider ---
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+
+      # --- Entrypoints ---
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+
+      # --- ACME / Let's Encrypt ---
+      - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.storage=/etc/traefik/acme/acme.json"
+      - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.tlschallenge=true"
+
+      # --- Logging (Optional) ---
+      - "--log.level=${LOG_LEVEL:-INFO}"
+    labels:
+      - "traefik.enable=true"
+
+      # --- Dashboard Router ---
+      - "traefik.http.routers.dashboard.rule=Host(`${DASHBOARD_HOST}`)"
+      - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.tls.certresolver=${CERT_RESOLVER_NAME:-myresolver}"
+
+      # --- Optional: Dashboard Authentication Middleware ---
+      # Uncomment and configure if you want basic auth for the dashboard
+      # - "traefik.http.routers.dashboard.middlewares=dashboard-auth"
+      # - "traefik.http.middlewares.dashboard-auth.basicauth.users=${DASHBOARD_AUTH_USERS}"
+
+      # --- Optional: HTTP to HTTPS Redirect (Global) ---
+      # Uncomment to enable automatic HTTP to HTTPS redirect for all services
+      # - "traefik.http.routers.http-catchall.rule=HostRegexp(`{host:.+}`)"
+      # - "traefik.http.routers.http-catchall.entrypoints=web"
+      # - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+      # - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      # - "traefik.http.middlewares.redirect-to-https.redirectscheme.permanent=true"
+
+volumes:
+  traefik-certs:
+    name: ${CERT_VOLUME_NAME:-traefik_traefik-certs}
+
+networks:
+  proxy-network:
+    external: true
+    name: ${NETWORK_NAME:-traefik_default}

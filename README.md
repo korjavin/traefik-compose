@@ -8,6 +8,7 @@ Docker Compose setup for Traefik v3.2 reverse proxy with automatic HTTPS via Let
 - **Automatic HTTPS** - Let's Encrypt TLS certificates via TLS challenge
 - **Container Discovery** - Automatic service discovery via Docker/Podman provider
 - **Dashboard** - Built-in monitoring dashboard
+- **Edge Agent Tunnel** - Optional port 8000 for Portainer Edge Agent WebSocket tunnels
 - **Fully Parameterized** - All configuration via environment variables
 - **GitOps Ready** - No secrets in repository
 - **Portainer Compatible** - Easy deployment and updates
@@ -18,6 +19,7 @@ Docker Compose setup for Traefik v3.2 reverse proxy with automatic HTTPS via Let
 - Portainer (for GitOps deployment)
 - Domain names pointing to your server
 - Ports 80 and 443 available
+- Port 8000 available (optional, only if using Portainer Edge Agent tunnel)
 
 ## Migration from Traefik v2
 
@@ -190,11 +192,42 @@ TRAEFIK_DASHBOARD=true
 LOG_LEVEL=INFO
 ```
 
+**For Portainer Edge Agent support**, uncomment the port 8000 lines in `docker-compose.yml` and set:
+```
+EDGE_TUNNEL_PORT=8000
+```
+
 ### 3. Deploy
 
 Click **Deploy the stack**
 
-### 4. Verify
+### 4. **CRITICAL: Connect to Shared Network** (If Using OAuth2-Proxy or Other Services)
+
+If you're using oauth2-proxy or other services that need to communicate with Traefik (via forward-auth middleware, for example), you **must** manually connect Traefik to the shared network after deployment:
+
+```bash
+ssh your-server.com
+sudo podman network connect traefik_default traefik
+```
+
+**Why is this needed?**
+
+When Traefik starts, it joins its default Podman network. However, oauth2-proxy and other services typically run on the `traefik_default` network. Without connecting Traefik to this shared network:
+- The `forward-auth` middleware cannot reach oauth2-proxy
+- All OAuth-protected services will return **500 Internal Server Error**
+- Traefik won't be able to route to services on the shared network
+
+**Verify network connectivity:**
+
+```bash
+# Check Traefik is on both networks (should show: podman and traefik_default)
+sudo podman inspect traefik --format '{{range $name, $network := .NetworkSettings.Networks}}{{printf "%s\n" $name}}{{end}}'
+
+# Test connectivity to oauth2-proxy (if applicable)
+sudo podman exec traefik ping -c 2 oauth2-proxy
+```
+
+### 5. Verify
 
 Check the dashboard at `https://traefik.yourdomain.com`
 
@@ -216,6 +249,7 @@ Check the dashboard at `https://traefik.yourdomain.com`
 | `CONTAINER_NAME` | Container name | `traefik` |
 | `HTTP_PORT` | HTTP port | `80` |
 | `HTTPS_PORT` | HTTPS port | `443` |
+| `EDGE_TUNNEL_PORT` | Portainer Edge Agent tunnel port (TCP/WebSocket) | `8000` |
 | `CERT_RESOLVER_NAME` | Certificate resolver name | `myresolver` |
 | `CERT_VOLUME_NAME` | Volume name for ACME storage | `traefik_traefik-certs` |
 | `TRAEFIK_DASHBOARD` | Enable dashboard | `true` |
@@ -288,26 +322,42 @@ sudo podman logs traefik
 
 ### Common Issues
 
-1. **Port already in use**:
+1. **500 Internal Server Error on OAuth-protected sites**:
+   - **Cause**: Traefik cannot reach oauth2-proxy (not on same network)
+   - **Solution**: Connect Traefik to the shared network:
+     ```bash
+     sudo podman network connect traefik_default traefik
+     ```
+   - **Verify**:
+     ```bash
+     sudo podman exec traefik ping -c 2 oauth2-proxy
+     ```
+
+2. **Port already in use**:
    - Check if old Traefik v2 is still running: `sudo podman ps --filter name=traefik`
    - Stop it: `sudo podman stop traefik-traefik-1`
 
-2. **ACME certificates not working**:
+3. **ACME certificates not working**:
    - Verify email is set: Check `ACME_EMAIL` variable
    - Check volume name matches: `CERT_VOLUME_NAME=traefik_traefik-certs`
    - Verify port 443 is accessible from internet
 
-3. **Dashboard not accessible**:
+4. **Dashboard not accessible**:
    - Check `DASHBOARD_HOST` is correct
    - Verify DNS points to your server
    - Check dashboard is enabled: `TRAEFIK_DASHBOARD=true`
 
-4. **Services not discovered**:
+5. **Services not discovered**:
    - Verify services are on same network: `NETWORK_NAME=traefik_default`
    - Check service has `traefik.enable=true` label
    - Verify podman socket is mounted correctly
 
-5. **Migration failed**:
+6. **Edge Agent tunnel connection refused (port 8000)**:
+   - Verify port 8000 is exposed: `sudo podman port traefik | grep 8000`
+   - Check firewall allows TCP on port 8000
+   - Verify edge-tunnel entrypoint is configured
+
+7. **Migration failed**:
    - Use rollback procedure (see above)
    - Check logs for errors: `sudo podman logs traefik`
    - Verify all environment variables are set correctly

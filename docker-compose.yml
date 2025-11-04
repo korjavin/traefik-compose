@@ -10,6 +10,8 @@ services:
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
+      # Uncomment if you need Portainer Edge Agent tunnel support:
+      # - "${EDGE_TUNNEL_PORT:-8000}:8000"
     volumes:
       # Podman socket (read-only) for container discovery
       - /var/run/podman/podman.sock:/var/run/docker.sock:ro
@@ -26,6 +28,8 @@ services:
       # --- Entrypoints ---
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      # Uncomment if you need Portainer Edge Agent tunnel support:
+      # - "--entrypoints.edge-tunnel.address=:8000"
 
       # --- ACME / Let's Encrypt ---
       - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.email=${ACME_EMAIL}"

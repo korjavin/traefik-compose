@@ -13,8 +13,10 @@ services:
       # Uncomment if you need Portainer Edge Agent tunnel support:
       # - "${EDGE_TUNNEL_PORT:-8000}:8000"
     volumes:
-      # Podman socket (read-only) for container discovery
-      - /var/run/podman/podman.sock:/var/run/docker.sock:ro
+      # Docker/Podman socket (read-only) for container discovery
+      # For Docker: /var/run/docker.sock
+      # For Podman: /var/run/podman/podman.sock
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       # ACME certificate storage
       - traefik-certs:/etc/traefik/acme
     command:

@@ -176,11 +176,17 @@ This configuration:
 ```
 TRAEFIK_IMAGE=traefik:v3.2
 CONTAINER_NAME=traefik
+DOCKER_SOCKET=/var/run/docker.sock
 NETWORK_NAME=traefik_default
 ACME_EMAIL=your-email@example.com
 CERT_RESOLVER_NAME=myresolver
 CERT_VOLUME_NAME=traefik_traefik-certs
 DASHBOARD_HOST=traefik.yourdomain.com
+```
+
+**Important:** For Podman hosts, set:
+```
+DOCKER_SOCKET=/var/run/podman/podman.sock
 ```
 
 **Optional variables** (use defaults if not specified):
@@ -239,6 +245,7 @@ Check the dashboard at `https://traefik.yourdomain.com`
 |----------|-------------|---------|
 | `ACME_EMAIL` | Email for Let's Encrypt notifications | `admin@example.com` |
 | `DASHBOARD_HOST` | Hostname for Traefik dashboard | `traefik.yourdomain.com` |
+| `DOCKER_SOCKET` | Docker/Podman socket path | `/var/run/docker.sock` (Docker) or `/var/run/podman/podman.sock` (Podman) |
 | `NETWORK_NAME` | Docker network name (shared with other services) | `traefik_default` |
 
 ### Optional Environment Variables
@@ -322,7 +329,18 @@ sudo podman logs traefik
 
 ### Common Issues
 
-1. **500 Internal Server Error on OAuth-protected sites**:
+1. **"Cannot connect to the Docker daemon" error in logs**:
+   - **Cause**: Wrong Docker/Podman socket path
+   - **Solution**: Set the correct socket path in Portainer environment variables:
+     - For Docker: `DOCKER_SOCKET=/var/run/docker.sock`
+     - For Podman: `DOCKER_SOCKET=/var/run/podman/podman.sock`
+   - **Verify** which runtime you're using:
+     ```bash
+     docker --version  # If this works, use /var/run/docker.sock
+     podman --version  # If this works, use /var/run/podman/podman.sock
+     ```
+
+2. **500 Internal Server Error on OAuth-protected sites**:
    - **Cause**: Traefik cannot reach oauth2-proxy (not on same network)
    - **Solution**: Connect Traefik to the shared network:
      ```bash
@@ -333,31 +351,31 @@ sudo podman logs traefik
      sudo podman exec traefik ping -c 2 oauth2-proxy
      ```
 
-2. **Port already in use**:
+3. **Port already in use**:
    - Check if old Traefik v2 is still running: `sudo podman ps --filter name=traefik`
    - Stop it: `sudo podman stop traefik-traefik-1`
 
-3. **ACME certificates not working**:
+4. **ACME certificates not working**:
    - Verify email is set: Check `ACME_EMAIL` variable
    - Check volume name matches: `CERT_VOLUME_NAME=traefik_traefik-certs`
    - Verify port 443 is accessible from internet
 
-4. **Dashboard not accessible**:
+5. **Dashboard not accessible**:
    - Check `DASHBOARD_HOST` is correct
    - Verify DNS points to your server
    - Check dashboard is enabled: `TRAEFIK_DASHBOARD=true`
 
-5. **Services not discovered**:
+6. **Services not discovered**:
    - Verify services are on same network: `NETWORK_NAME=traefik_default`
    - Check service has `traefik.enable=true` label
-   - Verify podman socket is mounted correctly
+   - Verify socket path is correct: `DOCKER_SOCKET`
 
-6. **Edge Agent tunnel connection refused (port 8000)**:
+7. **Edge Agent tunnel connection refused (port 8000)**:
    - Verify port 8000 is exposed: `sudo podman port traefik | grep 8000`
    - Check firewall allows TCP on port 8000
    - Verify edge-tunnel entrypoint is configured
 
-7. **Migration failed**:
+8. **Migration failed**:
    - Use rollback procedure (see above)
    - Check logs for errors: `sudo podman logs traefik`
    - Verify all environment variables are set correctly

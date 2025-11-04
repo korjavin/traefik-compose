@@ -18,7 +18,8 @@ Docker Compose setup for Traefik v3.2 reverse proxy with automatic HTTPS via Let
 - Docker or Podman runtime
 - Portainer (for GitOps deployment)
 - Domain names pointing to your server
-- Ports 80 and 443 available
+- **Port 80** accessible from internet (required for Let's Encrypt HTTP challenge)
+- **Port 443** accessible from internet (optional, depends on your setup - see ACME Configuration)
 - Port 8000 available (optional, only if using Portainer Edge Agent tunnel)
 
 ## Migration from Traefik v2
@@ -237,6 +238,48 @@ sudo podman exec traefik ping -c 2 oauth2-proxy
 
 Check the dashboard at `https://traefik.yourdomain.com`
 
+## ACME / Let's Encrypt Configuration
+
+This setup supports two ACME challenge types. **Choose one** based on your port availability:
+
+### HTTP Challenge (Default)
+
+**Use when:** Port 443 is NOT available or you're using non-standard HTTPS port (e.g., 1443, 8443)
+
+**Requirements:**
+- Port 80 must be accessible from internet
+- Can use any port for HTTPS (443, 1443, etc.)
+
+**Already configured in docker-compose.yml** (default):
+```yaml
+- "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+- "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+```
+
+### TLS Challenge
+
+**Use when:** Port 443 is available and accessible from internet
+
+**Requirements:**
+- Port 443 must be accessible from internet
+- Traefik must listen on port 443
+
+**To enable:** Uncomment these lines in `docker-compose.yml`:
+```yaml
+# - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+```
+
+And comment out HTTP challenge lines.
+
+### Common ACME Scenarios
+
+| Your Setup | Port 80 | Port 443 | HTTPS Port | Challenge Type |
+|------------|---------|----------|------------|----------------|
+| Standard server | ✓ Open | ✓ Open | 443 | Either works (TLS is simpler) |
+| Non-standard HTTPS port | ✓ Open | ✗ Blocked | 1443 | **HTTP Challenge** (default) |
+| Another service on 443 | ✓ Open | ✗ Used | 8443 | **HTTP Challenge** (default) |
+| Behind proxy/CDN | Depends | Depends | Any | Depends on proxy config |
+
 ## Configuration Reference
 
 ### Required Environment Variables
@@ -355,27 +398,38 @@ sudo podman logs traefik
    - Check if old Traefik v2 is still running: `sudo podman ps --filter name=traefik`
    - Stop it: `sudo podman stop traefik-traefik-1`
 
-4. **ACME certificates not working**:
+4. **ACME TLS handshake failure / "remote error: tls: handshake failure"**:
+   - **Cause**: Using TLS challenge but port 443 is not accessible from internet
+   - **Solution**: The default configuration now uses HTTP challenge (port 80). Make sure port 80 is open.
+   - **Alternative**: If port 443 IS available, switch to TLS challenge (see ACME Configuration section)
+   - **Verify port is open**:
+     ```bash
+     # From external machine or use online port checker
+     nc -zv your-domain.com 80
+     ```
+
+5. **ACME certificates not working (general)**:
    - Verify email is set: Check `ACME_EMAIL` variable
    - Check volume name matches: `CERT_VOLUME_NAME=traefik_traefik-certs`
-   - Verify port 443 is accessible from internet
+   - Verify DNS points to correct server
+   - Check Traefik logs for specific ACME errors
 
-5. **Dashboard not accessible**:
+6. **Dashboard not accessible**:
    - Check `DASHBOARD_HOST` is correct
    - Verify DNS points to your server
    - Check dashboard is enabled: `TRAEFIK_DASHBOARD=true`
 
-6. **Services not discovered**:
+7. **Services not discovered**:
    - Verify services are on same network: `NETWORK_NAME=traefik_default`
    - Check service has `traefik.enable=true` label
    - Verify socket path is correct: `DOCKER_SOCKET`
 
-7. **Edge Agent tunnel connection refused (port 8000)**:
+8. **Edge Agent tunnel connection refused (port 8000)**:
    - Verify port 8000 is exposed: `sudo podman port traefik | grep 8000`
    - Check firewall allows TCP on port 8000
    - Verify edge-tunnel entrypoint is configured
 
-8. **Migration failed**:
+9. **Migration failed**:
    - Use rollback procedure (see above)
    - Check logs for errors: `sudo podman logs traefik`
    - Verify all environment variables are set correctly

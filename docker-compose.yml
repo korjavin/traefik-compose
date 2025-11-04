@@ -36,7 +36,13 @@ services:
       # --- ACME / Let's Encrypt ---
       - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.storage=/etc/traefik/acme/acme.json"
-      - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.tlschallenge=true"
+      # TLS Challenge (requires port 443 accessible from internet)
+      # Uncomment if port 443 is available:
+      # - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.tlschallenge=true"
+      # HTTP Challenge (requires port 80 accessible from internet)
+      # Uncomment if using non-standard HTTPS port or port 443 is not available:
+      - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.httpchallenge=true"
+      - "--certificatesresolvers.${CERT_RESOLVER_NAME:-myresolver}.acme.httpchallenge.entrypoint=web"
 
       # --- Logging (Optional) ---
       - "--log.level=${LOG_LEVEL:-INFO}"

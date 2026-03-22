@@ -19,6 +19,8 @@ services:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       # ACME certificate storage
       - traefik-certs:/etc/traefik/acme
+    environment:
+      - DOCKER_API_VERSION=1.41
     command:
       # --- API & Dashboard ---
       - "--api.dashboard=${TRAEFIK_DASHBOARD:-true}"
